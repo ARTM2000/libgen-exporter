@@ -41,78 +41,75 @@ const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 //@ts-ignore
 const pdf2html_1 = __importDefault(require("pdf2html"));
+const json5_1 = __importDefault(require("json5"));
 const sleep = (millisecond) => {
     const now = new Date().valueOf();
     while (now + millisecond - new Date().valueOf() < 0) { }
 };
+function humanFileSize(bytes, si, dp) {
+    const thresh = si ? 1000 : 1024;
+    if (Math.abs(bytes) < thresh) {
+        return bytes + " B";
+    }
+    const units = si
+        ? ["kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"]
+        : ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
+    let u = -1;
+    const r = 10 ** dp;
+    do {
+        bytes /= thresh;
+        ++u;
+    } while (Math.round(Math.abs(bytes) * r) / r >= thresh &&
+        u < units.length - 1);
+    return bytes.toFixed(dp) + " " + units[u];
+}
 class LibGenToAutomate {
     constructor() {
-        this.years = [
-            2010,
-            // , 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020,
-        ];
-        this.references = [
-            // {
-            // 	i: 1,
-            // 	jid: "20506",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 2,
-            // 	jid: "18843",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 3,
-            // 	jid: "18829",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 4,
-            // 	jid: "18770",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 5,
-            // 	jid: "18767",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 6,
-            // 	jid: "18763",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 7,
-            // 	jid: "18024",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 8,
-            // 	jid: "17036",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 9,
-            // 	jid: "16880",
-            // 	data: [],
-            // },
-            {
-                i: 10,
-                jid: "15255",
-                data: [],
-            },
-            // {
-            // 	i: 11,
-            // 	jid: "13708",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 12,
-            // 	jid: "17006",
-            // 	data: [],
-            // },
-        ];
+        this.years = [];
+        this.references = [];
+        const configFilePath = path.join(__dirname, "..", "config.jsonc");
+        const configRawContent = fs.readFileSync(configFilePath, {
+            encoding: "utf8",
+        });
+        const config = json5_1.default.parse(configRawContent);
+        this.years = config.years;
+        this.references = config.journal_ids.map((jid, index) => ({
+            i: index + 1,
+            jid: `${jid}`,
+            data: [],
+        }));
+        const pdfsPath = path.join(__dirname, "..", "pdfs");
+        const pdfsFolderExistence = fs.existsSync(pdfsPath);
+        if (!pdfsFolderExistence) {
+            fs.mkdirSync(pdfsPath, { recursive: true });
+        }
+        fs.readdir(pdfsPath, (err, files) => {
+            if (err)
+                throw err;
+            for (const file of files) {
+                fs.unlink(path.join(pdfsPath, file), (err) => {
+                    if (err)
+                        throw err;
+                });
+            }
+            fs.writeFileSync(path.join(pdfsPath, ".gitignore"), "*\n!.gitignore");
+        });
+        const outputPath = path.join(__dirname, "..", "output");
+        const outputFolderExistence = fs.existsSync(outputPath);
+        if (!outputFolderExistence) {
+            fs.mkdirSync(outputPath, { recursive: true });
+        }
+        fs.readdir(outputPath, (err, files) => {
+            if (err)
+                throw err;
+            for (const file of files) {
+                fs.unlink(path.join(outputPath, file), (err) => {
+                    if (err)
+                        throw err;
+                });
+            }
+            fs.writeFileSync(path.join(outputPath, ".gitignore"), "*\n!.gitignore");
+        });
     }
     start() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -120,15 +117,15 @@ class LibGenToAutomate {
                 const ref = this.references[i];
                 for (const year of this.years) {
                     const extractedData = yield this.extractJournalsFromReference(ref.jid, year);
-                    console.log(`year ${year} completed =========================`);
+                    console.log(`====== Year ${year} of Journal ID ${ref.jid} completed ======`);
                     ref.data.push(extractedData);
                 }
-                console.log("write csv -----------------------------");
-                this.writeJournalInfoToCSV(ref, ref.i);
+                console.log(`Export Journal Id ${ref.jid} to csv -----------------------------`);
+                this.writeJournalInfoToCSV(ref);
             }
         });
     }
-    writeJournalInfoToCSV(ref, index) {
+    writeJournalInfoToCSV(ref) {
         return __awaiter(this, void 0, void 0, function* () {
             const csvFilePath = path.join(__dirname, "..", "output", `${ref.jid}-email.csv`);
             const header = "Year,Journal,Email";
@@ -245,25 +242,26 @@ class LibGenToAutomate {
         return __awaiter(this, void 0, void 0, function* () {
             console.log(`\nDownloading [${jTitle}] >`);
             console.log(" --------------------------------------");
-            console.log("| download started ..................  |");
             const file = fs.createWriteStream(filePathWithName);
             sleep(2000);
             return axios_1.default
                 .get(url, { timeout: 10000000, responseType: "stream" })
                 .then((res) => {
+                const fileSize = humanFileSize(+res.headers["content-length"], true, 2);
+                console.log(`  Download started [${fileSize}]`);
                 return new Promise((resolve, reject) => {
                     res.data.pipe(file);
                     let error = null;
                     file.on("error", (err) => {
                         error = err;
                         file.close();
-                        console.log("| ..................download failed!!  |");
+                        console.log("  ..................Download failed!!  ");
                         console.log(" --------------------------------------");
                         reject(err);
                     });
                     file.on("close", () => {
                         if (!error) {
-                            console.log("| ..................download completed |");
+                            console.log("  ..................Download completed ");
                             console.log(" --------------------------------------");
                             resolve();
                         }

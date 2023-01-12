@@ -41,77 +41,58 @@ const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 //@ts-ignore
 const pdf2html_1 = __importDefault(require("pdf2html"));
+const json5_1 = __importDefault(require("json5"));
 const sleep = (millisecond) => {
     const now = new Date().valueOf();
     while (now + millisecond - new Date().valueOf() < 0) { }
 };
 class LibGenToAutomate {
     constructor() {
-        this.years = [
-            2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020,
-        ];
-        this.references = [
-            // {
-            // 	i: 1,
-            // 	jid: "20506",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 2,
-            // 	jid: "18843",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 3,
-            // 	jid: "18829",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 4,
-            // 	jid: "18770",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 5,
-            // 	jid: "18767",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 6,
-            // 	jid: "18763",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 7,
-            // 	jid: "18024",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 8,
-            // 	jid: "17036",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 9,
-            // 	jid: "16880",
-            // 	data: [],
-            // },
-            {
-                i: 10,
-                jid: "15255",
-                data: [],
-            },
-            // {
-            // 	i: 11,
-            // 	jid: "13708",
-            // 	data: [],
-            // },
-            // {
-            // 	i: 12,
-            // 	jid: "17006",
-            // 	data: [],
-            // },
-        ];
+        this.years = [];
+        this.references = [];
+        const configFilePath = path.join(__dirname, "..", "config.jsonc");
+        const configRawContent = fs.readFileSync(configFilePath, {
+            encoding: "utf8",
+        });
+        const config = json5_1.default.parse(configRawContent);
+        this.years = config.years;
+        this.references = config.journal_ids.map((jid, index) => ({
+            i: index + 1,
+            jid: `${jid}`,
+            data: [],
+        }));
+        const pdfsPath = path.join(__dirname, "..", "pdfs");
+        const pdfsFolderExistence = fs.existsSync(pdfsPath);
+        if (!pdfsFolderExistence) {
+            fs.mkdirSync(pdfsPath, { recursive: true });
+        }
+        fs.readdir(pdfsPath, (err, files) => {
+            if (err)
+                throw err;
+            for (const file of files) {
+                fs.unlink(path.join(pdfsPath, file), (err) => {
+                    if (err)
+                        throw err;
+                });
+            }
+            fs.writeFileSync(path.join(pdfsPath, ".gitignore"), "*\n!.gitignore");
+        });
+        const outputPath = path.join(__dirname, "..", "output");
+        const outputFolderExistence = fs.existsSync(outputPath);
+        if (!outputFolderExistence) {
+            fs.mkdirSync(outputPath, { recursive: true });
+        }
+        fs.readdir(outputPath, (err, files) => {
+            if (err)
+                throw err;
+            for (const file of files) {
+                fs.unlink(path.join(outputPath, file), (err) => {
+                    if (err)
+                        throw err;
+                });
+            }
+            fs.writeFileSync(path.join(outputPath, ".gitignore"), "*\n!.gitignore");
+        });
     }
     start() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -126,18 +107,6 @@ class LibGenToAutomate {
                 console.log("write csv -----------------------------");
                 this.writeJournalInfoToCSV(ref, ref.i);
             }
-            // for (const ref of this.references) {
-            // 	for (const d of ref.data) {
-            // 		for (const journal of d.journals) {
-            // 			console.log('Authors >>', journal.authors, d.year, journal.journal, '\n');
-            // 		}
-            // 	}
-            // }
-            // console.log(
-            // 	this.references[this.references.length - 1].data[
-            // 		this.references[0].data.length - 1
-            // 	]
-            // );
         });
     }
     writeJournalInfoToCSV(ref, index) {
@@ -233,19 +202,7 @@ class LibGenToAutomate {
                             finalResult[i].journal = jTitle;
                             const doi = a.next().text().replace(/DOI: /, "");
                             finalResult[i].downloadLink = yield this.getJournalDownloadLink(doi);
-                            // const pdfFile = await axios.get(finalResult[i].downloadLink as string, {responseType: 'blob'})
-                            // const pdfFilePath = path.join(
-                            // 	__dirname,
-                            // 	"..",
-                            // 	"pdfs",
-                            // 	jTitle
-                            // 		.replace(/\n|\r|\t/g, '')
-                            // 		.replace(/[()\[\]\}\{\$]/g, "")
-                            // 		.replace(/\/|\\/g, "")
-                            // 		.replace(/\s/g, "-")
-                            // 		.replace(/-{2,}/g, '-') + ".pdf"
-                            // );
-                            const shortPDFFilePath = path.join(__dirname, '..', 'pdfs', `${new Date().valueOf()}.pdf`);
+                            const shortPDFFilePath = path.join(__dirname, "..", "pdfs", `${new Date().valueOf()}.pdf`);
                             const exist = fs.existsSync(shortPDFFilePath);
                             try {
                                 if (!exist)
@@ -283,38 +240,20 @@ class LibGenToAutomate {
                 return new Promise((resolve, reject) => {
                     res.data.pipe(file);
                     let error = null;
-                    file.on('error', err => {
+                    file.on("error", (err) => {
                         error = err;
                         file.close();
-                        console.log('.....................download failed');
+                        console.log(".....................download failed");
                         reject(err);
                     });
-                    file.on('close', () => {
+                    file.on("close", () => {
                         if (!error) {
-                            console.log('..................download completed');
+                            console.log("..................download completed");
                             resolve();
                         }
-                        //no need to call the reject here, as it will have been called in the
-                        //'error' stream;
                     });
                 });
             });
-            // return new Promise((resolve, reject) => {
-            // 	const file = fs.createWriteStream(filePathWithName);
-            // 	const request = http.get({path:url, timeout: 1000000000}, function (response) {
-            // 		response.pipe(file);
-            // 		file.on("error", (err) => {
-            // 			console.log("---------------- Download failed");
-            // 			reject(err);
-            // 		});
-            // 		// after download completed close filestream
-            // 		file.on("finish", () => {
-            // 			file.close();
-            // 			console.log("---------------- Download Completed");
-            // 			resolve();
-            // 		});
-            // 	});
-            // });
         });
     }
     convertPDFToTxt(filePath) {
@@ -330,4 +269,3 @@ class LibGenToAutomate {
     }
 }
 new LibGenToAutomate().start();
-// getHtmlFromLibGen('20506', 2010)
