@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start:dev": "tsc -w & nodemon ./build/main.js",
-    "start": "tsc && node ./build/main.js",
+    "start": "npm run build && node ./build/main.js",
+    "start:emails": "npm run build && node ./build/just-emails.js",
     "build": "tsc"
   },
   "keywords": [],

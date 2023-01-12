@@ -1,1 +1,1 @@
-rm -rf ./pdfs && mkdir ./pdfs
+rm -rf ./pdfs && mkdir ./pdfs && cp ./pdfs.gitignore ./pdfs/.gitignore

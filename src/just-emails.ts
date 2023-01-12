@@ -27,7 +27,8 @@ const sleep = (millisecond: number) => {
 
 class LibGenToAutomate {
 	private readonly years: number[] = [
-		2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020,
+		2010,
+		// , 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020,
 	];
 	private readonly references: Reference[] = [
 		// {
@@ -95,7 +96,6 @@ class LibGenToAutomate {
 	async start(): Promise<void> {
 		for (let i = 0; i < this.references.length; i++) {
 			const ref = this.references[i];
-			console.log("new ref ---------------------------");
 			for (const year of this.years) {
 				const extractedData = await this.extractJournalsFromReference(
 					ref.jid,
@@ -108,54 +108,37 @@ class LibGenToAutomate {
 			console.log("write csv -----------------------------");
 			this.writeJournalInfoToCSV(ref, ref.i);
 		}
-
-		// for (const ref of this.references) {
-		// 	for (const d of ref.data) {
-		// 		for (const journal of d.journals) {
-		// 			console.log('Authors >>', journal.authors, d.year, journal.journal, '\n');
-		// 		}
-		// 	}
-		// }
-
-		// console.log(
-		// 	this.references[this.references.length - 1].data[
-		// 		this.references[0].data.length - 1
-		// 	]
-		// );
 	}
 
 	private async writeJournalInfoToCSV(
 		ref: Reference,
 		index: number
 	): Promise<void> {
-		const csvFilePath = path.join(__dirname, "..", "output", `${index}.csv`);
-		console.log("here");
+		const csvFilePath = path.join(
+			__dirname,
+			"..",
+			"output",
+			`${ref.jid}-email.csv`
+		);
 
-		const header = "Year,Journal,Author,Email,Download link";
+		const header = "Year,Journal,Email";
 		const rows: string[] = [];
 		for (const data of ref.data) {
 			let row = "";
 			row += data.year + ",";
+			if (!data.journals || !Array.isArray(data.journals)) continue;
 			for (const journalData of data.journals) {
-				row += '"' + journalData.journal + '"' + ",";
-				for (const author of journalData.authors as string[]) {
-					row +=
-						'"' +
-						author +
-						'"' +
-						"," +
-						'"' +
-						journalData.email +
-						'"' +
-						"," +
-						'"' +
-						journalData.downloadLink +
-						'"';
-					rows.push(row);
-					row = data.year + "," + '"' + journalData.journal + '"' + ",";
-				}
+				row +=
+					'"' + journalData.journal + '"' + "," + '"' + journalData.email + '"';
+				rows.push(row);
 				row = data.year + ",";
 			}
+		}
+
+		// check file exist
+		if (fs.existsSync(csvFilePath)) {
+			// if exists, remove it
+			fs.unlinkSync(csvFilePath);
 		}
 
 		const csv = header + "\n" + rows.join("\n");
@@ -166,7 +149,9 @@ class LibGenToAutomate {
 		jid: string,
 		year: number
 	): Promise<{ year: number; journals: JournalInfo[] }> {
-		console.log(`year ${year} ----------------------------`);
+		console.log(
+			`Exporting year ${year} of JournalID ${jid} ----------------------------`
+		);
 		const content = await this.getHtmlFromLibGen(jid, year);
 		const resultList = await this.parseLibGenSinglePageHtmlContentToData(
 			content
@@ -208,7 +193,7 @@ class LibGenToAutomate {
 
 	private async parseLibGenSinglePageHtmlContentToData(
 		html: string
-	): Promise<JournalInfo[]> {
+	): Promise<JournalInfo[] | any> {
 		const finalResult: JournalInfo[] = [];
 
 		try {
@@ -232,43 +217,36 @@ class LibGenToAutomate {
 						finalResult[i].downloadLink = await this.getJournalDownloadLink(
 							doi
 						);
-						// const pdfFile = await axios.get(finalResult[i].downloadLink as string, {responseType: 'blob'})
-						// const pdfFilePath = path.join(
-						// 	__dirname,
-						// 	"..",
-						// 	"pdfs",
-						// 	jTitle
-						// 		.replace(/\n|\r|\t/g, '')
-						// 		.replace(/[()\[\]\}\{\$]/g, "")
-						// 		.replace(/\/|\\/g, "")
-						// 		.replace(/\s/g, "-")
-						// 		.replace(/-{2,}/g, '-') + ".pdf"
-						// );
+						const pdfFile = await axios.get(
+							finalResult[i].downloadLink as string,
+							{ responseType: "blob" }
+						);
 
-						const shortPDFFilePath = path.join(__dirname, '..', 'pdfs', `${new Date().valueOf()}.pdf`)
-						const exist = fs.existsSync(shortPDFFilePath);
+						const shortPDFFilePath = path.join(
+							__dirname,
+							"..",
+							"pdfs",
+							`${new Date().valueOf()}.pdf`
+						);
 						try {
-							if (!exist)
-								await this.downloadFilePDF(
-									finalResult[i].downloadLink as string,
-									shortPDFFilePath
-								);
+							await this.downloadFilePDF(
+								finalResult[i].downloadLink as string,
+								shortPDFFilePath,
+								jTitle
+							);
 							const pdfContent = await this.convertPDFToTxt(shortPDFFilePath);
 							const emails = pdfContent.match(
 								/(?:[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?|\[(?:(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9]))\.){3}(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])/g
 							) as string[];
+							// remove file after usage
+							fs.unlinkSync(shortPDFFilePath);
 							const uniqueEmails = new Set(emails);
-							console.log(
-								"emails >> ",
-								uniqueEmails,
-								[...uniqueEmails].join(";")
-							);
+							console.log("emails >> ", [...uniqueEmails].join("; "));
 							finalResult[i].email = [...uniqueEmails].join(";");
 						} catch (err) {
 							console.log("error to parse file", jTitle, err);
 							finalResult[i].email = "[]";
 						}
-						// console.log("pdf content >>", pdfContent);
 					}
 				}
 			}
@@ -277,57 +255,45 @@ class LibGenToAutomate {
 
 			return finalResult;
 		} catch (err) {
-			throw err;
+			// throw err;
+			console.log("Error in parse reference data > ", err);
 		}
 	}
 
 	private async downloadFilePDF(
 		url: string,
-		filePathWithName: string
+		filePathWithName: string,
+		jTitle: string
 	): Promise<void> {
-		console.log("download started ..................");
+		console.log(`\nDownloading [${jTitle}] >`);
+		console.log(" --------------------------------------");
+		console.log("| download started ..................  |");
 		const file = fs.createWriteStream(filePathWithName);
-		sleep(2000)
+		sleep(2000);
 		return axios
 			.get(url, { timeout: 10000000, responseType: "stream" })
 			.then((res) => {
 				return new Promise((resolve, reject) => {
 					res.data.pipe(file);
 					let error: any = null;
-					file.on('error', err => {
-					  error = err;
-					  file.close();
-					  console.log('.....................download failed');
-					  reject(err);
+					file.on("error", (err) => {
+						error = err;
+						file.close();
+						console.log("| ..................download failed!!  |");
+						console.log(" --------------------------------------");
+						reject(err);
 					});
-					file.on('close', () => {
-					  if (!error) {
-						console.log('..................download completed');
-						resolve();
-					  }
-					  //no need to call the reject here, as it will have been called in the
-					  //'error' stream;
+					file.on("close", () => {
+						if (!error) {
+							console.log("| ..................download completed |");
+							console.log(" --------------------------------------");
+							resolve();
+						}
+						//no need to call the reject here, as it will have been called in the
+						//'error' stream;
 					});
 				});
-			})
-
-		// return new Promise((resolve, reject) => {
-		// 	const file = fs.createWriteStream(filePathWithName);
-		// 	const request = http.get({path:url, timeout: 1000000000}, function (response) {
-		// 		response.pipe(file);
-		// 		file.on("error", (err) => {
-		// 			console.log("---------------- Download failed");
-		// 			reject(err);
-		// 		});
-
-		// 		// after download completed close filestream
-		// 		file.on("finish", () => {
-		// 			file.close();
-		// 			console.log("---------------- Download Completed");
-		// 			resolve();
-		// 		});
-		// 	});
-		// });
+			});
 	}
 
 	private async convertPDFToTxt(filePath: string): Promise<string> {
@@ -341,5 +307,3 @@ class LibGenToAutomate {
 }
 
 new LibGenToAutomate().start();
-
-// getHtmlFromLibGen('20506', 2010)
